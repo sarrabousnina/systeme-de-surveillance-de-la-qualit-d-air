@@ -1,0 +1,214 @@
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+
+sbit LCD_RS at RD4_bit;
+sbit LCD_EN at RD5_bit;
+sbit LCD_D4 at RD0_bit;
+sbit LCD_D5 at RD1_bit;
+sbit LCD_D6 at RD2_bit;
+sbit LCD_D7 at RD3_bit;
+
+
+sbit LCD_RS_Direction at TRISD4_bit;
+sbit LCD_EN_Direction at TRISD5_bit;
+sbit LCD_D4_Direction at TRISD0_bit;
+sbit LCD_D5_Direction at TRISD1_bit;
+sbit LCD_D6_Direction at TRISD2_bit;
+sbit LCD_D7_Direction at TRISD3_bit;
+
+
+int TI=23 , HI=30 ;
+int j=0 , nb=0 ,i , y=0 , N ;
+char temptext[20], humtext[20] , Ntext[20] ;
+unsigned temp ,hum ;
+int T,H;
+void main()
+{
+     Lcd_Init();
+     Lcd_Cmd(_LCD_CLEAR);
+     Lcd_Cmd(_LCD_CURSOR_OFF);
+
+     trisb=0b00110001 ;
+     trisa=0b010000;
+     trisd=0;
+     trise=0b011;
+
+
+     adc_init();
+     ADCON0 = 0b01100000;
+     ADCON0.ADON = 1;
+
+
+     EECON1 = 0x00;    // Effacer tout d'abord le registre EECON1
+     EECON1.EEPGD = 0;   // Accéder à la mémoire EEPROM
+
+
+
+     intcon.GIE=1 ;
+     intcon.INTE=1;
+     intcon.RBIE=1 ;
+     option_reg.intedg=1 ;
+
+
+     portb.rb2=0;
+     porta.ra1=1;
+     portb.rb1=0;
+     portb.rb7=0;
+     Lcd_Out(1,5,"EN VEILLE");
+     Lcd_Cmd(_LCD_CURSOR_OFF);
+     EEPROM_write(0, TI);
+     EEPROM_write(4, HI);
+
+
+
+     while(1)
+     {
+             int c=0;
+             if(j==1)
+             {
+                       PORTB.RB2=1;
+                       PORTA.RA1=0;
+
+
+                       temp=adc_read(6)/10  ;
+                       EEPROM_write(0x50, temp);
+                       T=EEPROM_read(0x50);
+                       IntToStr(T, temptext);
+
+
+                       hum=adc_read(5)/10 ;
+                       EEPROM_write(0x80, hum);
+                       H=EEPROM_read(0x80);
+                       IntToStr(H, humtext);
+
+
+                       Lcd_Cmd(_LCD_CLEAR);
+                       Lcd_Cmd(_LCD_CURSOR_OFF);
+                       Lcd_Out(1,6,"EN MARCHE");
+
+                       Lcd_Out(2, 1,temptext);
+                       Lcd_Out(2,8,"C");
+                       Lcd_Out(2,9,humtext);
+                       Lcd_Out(2, 15,"%");
+                       delay_ms(100);
+             }
+             if(j==2 || T>23 || H>HI )
+             {
+                     nb++;
+                     if(portb.rb4==1 && T>23 && H<=HI)
+                             nb++;
+                     if(portb.rb4==1 && H>HI && T<=23)
+                             nb++;
+                     if(H>HI && T>23 && portb.rb4==0)
+                             nb++;
+                     if(H>HI && T>23 && portb.rb4==1)
+                             nb+=2;
+
+                     y=1;
+                     for(i=0 ; i<5 ; i++)
+                     {
+                             porta.ra1=1;
+                             delay_ms(20);
+                             porta.ra1=0;
+                             delay_ms(20);
+                     }
+                     portb.rb1=1;
+                     Lcd_Cmd(_Lcd_CLEAR);
+                     Lcd_Cmd(_LCD_CURSOR_OFF);
+                     Lcd_Out(1, 6,"EN DANGER ");
+
+                     if(y==1)
+                     {
+                                         while(c<4)
+                                         {
+                                                          if(porta.ra4=1)
+                                                          {
+                                                                        c++;
+                                                                        delay_ms(100);
+                                                                        porta.ra4=0;
+                                                          }
+
+                                         }
+                                         portb.rb1=0;
+                                         Lcd_Cmd(_Lcd_CLEAR);
+                                         Lcd_Cmd(_LCD_CURSOR_OFF);
+                                         Lcd_Out(1, 6,"LIBERE");
+                                         delay_ms(300);
+                                         Lcd_Cmd(_Lcd_CLEAR);
+                                         if(portb.rb7==1)
+                                         {
+                                                 EEPROM_write(0x100, nb);
+                                                 N=EEPROM_read(0x100);
+                                                 IntToStr(nb, Ntext);
+                                                 Lcd_Cmd(_LCD_CLEAR);
+                                                 Lcd_Cmd(_LCD_CURSOR_OFF);
+                                                 Lcd_Out(1,2,Ntext);
+                                                 Lcd_Out(2,2,"probleme(s)");
+                                                 delay_ms(1000);
+
+
+
+
+
+                                          }
+                                          j=1;
+
+
+                      }
+
+             }
+             if(portb.rb7==1)
+                                         {
+                                                 EEPROM_write(0x100, nb);
+                                                 N=EEPROM_read(0x100);
+                                                 IntToStr(N, Ntext);
+                                                 Lcd_Cmd(_LCD_CLEAR);
+                                                 Lcd_Cmd(_LCD_CURSOR_OFF);
+                                                 Lcd_Out(1,2,Ntext);
+                                                 Lcd_Out(2,2,"probleme(s)");
+                                                 delay_ms(500);
+
+
+
+
+
+                                          }
+
+
+
+
+
+      }
+}
+
+void interrupt()
+{
+
+     if(intcon.INTF==1)
+     {
+                       intcon.intf=0;
+                       j=1;
+     }
+     if ( intcon.rbif==1)
+     {
+        if(portb.rb4==1)
+        {
+                        j=2;
+
+                       INTCON.T0IE=1;
+                       TMR0=0;
+                       option_reg= 0b00000101;
+                       intcon.rbif=0;
+
+        }
+
+     }
+     if(intcon.T0IF==1)
+     {
+
+                       TMR0=1;
+                       y=1;
+                       intcon.T0IF=0;
+     }
+}
